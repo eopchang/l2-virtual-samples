@@ -11,10 +11,16 @@
 Ridge regression adds a penalty term λ‖**w**‖² to the OLS cost function. This is mathematically **identical** to adding *virtual data points* with target y = 0 and then running ordinary least squares on the augmented dataset:
 
 ```math
-J(\mathbf{w}) = \lVert \mathbf{y} - \mathbf{X}\mathbf{w} \rVert^2 + \lambda \lVert \mathbf{w} \rVert^2 = \left\lVert \begin{pmatrix} \mathbf{y} \\ \mathbf{0} \end{pmatrix} - \begin{pmatrix} \mathbf{X} \\ \sqrt{\lambda}\,\mathbf{I} \end{pmatrix} \mathbf{w} \right\rVert^2
+J(\mathbf{w}) = \underbrace{\lVert \mathbf{y} - \mathbf{X}\mathbf{w} \rVert^2}_{n \text{ real samples}} + \underbrace{\lVert \mathbf{0} - \sqrt{\lambda}\,\mathbf{I}\,\mathbf{w} \rVert^2}_{p \text{ virtual samples}}
 ```
 
-Each virtual sample **x**ᵥ = √λ **e**ⱼ with yᵥ = 0 pulls the j-th weight toward zero — the hallmark of L2 regularization.
+where
+
+```math
+\mathbf{X} \in \mathbb{R}^{n \times p},\quad \mathbf{y} \in \mathbb{R}^{n},\quad \mathbf{w} \in \mathbb{R}^{p},\quad \sqrt{\lambda}\,\mathbf{I} \in \mathbb{R}^{p \times p}
+```
+
+The second term is the cost from **p virtual samples**: each sample $\mathbf{x}_v^{(j)} = \sqrt{\lambda}\,\mathbf{e}_j$ with $y_v = 0$ pulls the j-th weight toward zero — the hallmark of L2 regularization.
 
 ## Features
 
