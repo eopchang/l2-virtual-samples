@@ -10,10 +10,9 @@
 
 Ridge regression adds a penalty term λ‖**w**‖² to the OLS cost function. This is mathematically **identical** to adding *virtual data points* with target y = 0 and then running ordinary least squares on the augmented dataset:
 
-$$
-J(\mathbf{w}) = \|\mathbf{y} - \mathbf{X}\mathbf{w}\|^2 + \lambda\|\mathbf{w}\|^2
-= \left\|\begin{pmatrix}\mathbf{y}\\\mathbf{0}\end{pmatrix} - \begin{pmatrix}\mathbf{X}\\\sqrt{\lambda}\,\mathbf{I}\end{pmatrix}\mathbf{w}\right\|^2
-$$
+```math
+J(\mathbf{w}) = \lVert \mathbf{y} - \mathbf{X}\mathbf{w} \rVert^2 + \lambda \lVert \mathbf{w} \rVert^2 = \left\lVert \begin{pmatrix} \mathbf{y} \\ \mathbf{0} \end{pmatrix} - \begin{pmatrix} \mathbf{X} \\ \sqrt{\lambda}\,\mathbf{I} \end{pmatrix} \mathbf{w} \right\rVert^2
+```
 
 Each virtual sample **x**ᵥ = √λ **e**ⱼ with yᵥ = 0 pulls the j-th weight toward zero — the hallmark of L2 regularization.
 
