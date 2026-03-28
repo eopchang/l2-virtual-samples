@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L2 Regularization ≡ Virtual Samples</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#e0e0e0;display:flex;flex-direction:column}
+.header{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);padding:10px 30px;border-bottom:2px solid #e94560;flex-shrink:0}
+.header h1{font-size:1.3em;color:#fff;margin-bottom:2px}
+.header .subtitle{font-size:.8em;color:#a0a8c0}
+.main-layout{display:flex;flex:1;min-height:0}
+.control-panel{width:300px;flex-shrink:0;background:#161822;padding:12px;overflow-y:auto;border-right:1px solid #2a2d3e}
+.section{margin-bottom:12px;background:#1c1f2e;border-radius:8px;padding:10px 12px;border:1px solid #2a2d3e}
+.section-title{font-size:.75em;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#e94560;margin-bottom:6px}
+.slider-group{margin-bottom:8px}
+.slider-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;font-size:.82em}
+.slider-value{background:#252840;padding:1px 7px;border-radius:3px;font-family:monospace;color:#64ffda;font-size:.85em}
+input[type="range"]{width:100%;height:5px;-webkit-appearance:none;background:#2a2d3e;border-radius:3px;outline:none}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#e94560;cursor:pointer;border:2px solid #fff}
+.btn{padding:5px 10px;border:none;border-radius:5px;cursor:pointer;font-size:.78em;font-weight:500;transition:all .15s}
+.btn-primary{background:#e94560;color:#fff}.btn-primary:hover{background:#d63851}
+.btn-secondary{background:#252840;color:#a0a8c0;border:1px solid #3a3d5e}.btn-secondary:hover{background:#2e3250;color:#fff}
+.btn-group{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.toggle-group{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.toggle-label{font-size:.8em;color:#c0c8e0}
+.toggle{position:relative;width:38px;height:20px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:#2a2d3e;border-radius:10px;transition:.3s}
+.toggle-slider:before{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:#666;left:3px;top:3px;transition:.3s}
+.toggle input:checked+.toggle-slider{background:#e94560}
+.toggle input:checked+.toggle-slider:before{transform:translateX(18px);background:#fff}
+.color-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.dot-real{background:#ffd93d}.dot-virtual{background:#4fc3f7}.dot-ols{background:#ffd93d}.dot-ridge{background:#64ffda}
+.info-text{font-size:.75em;color:#888;line-height:1.35;margin-top:5px}
+.data-list{max-height:120px;overflow-y:auto;margin-top:5px}
+.data-item{display:flex;align-items:center;justify-content:space-between;padding:2px 6px;margin-bottom:2px;background:#252840;border-radius:3px;font-size:.75em;font-family:monospace}
+.data-item .remove-btn{background:none;border:none;color:#e94560;cursor:pointer;font-size:1em;padding:0 3px}
+.virtual-item{background:#1a2840;border:1px dashed #3a6090}
+.weight-display{margin-top:5px;font-family:monospace;font-size:.78em;line-height:1.5}
+.weight-display .ols{color:#ffd93d}.weight-display .ridge{color:#64ffda}
+.matrix-display{background:#0f1117;border-radius:5px;padding:6px;margin-top:6px;overflow-x:auto}
+.matrix-display .katex{font-size:.78em}
+.preset-desc{font-size:.72em;color:#888;margin-top:3px;line-height:1.3}
+.mode-tabs{display:flex;gap:0;margin-bottom:10px}
+.mode-tab{flex:1;padding:6px 8px;text-align:center;cursor:pointer;font-size:.78em;font-weight:600;border:1px solid #2a2d3e;background:#1c1f2e;color:#888;transition:all .2s}
+.mode-tab:first-child{border-radius:6px 0 0 6px}.mode-tab:last-child{border-radius:0 6px 6px 0}
+.mode-tab.active{background:#e94560;color:#fff;border-color:#e94560}
+/* Radio group for virtual sample count */
+.vs-radio{display:flex;gap:0;margin-top:6px}
+.vs-radio label{flex:1;text-align:center;padding:4px 0;font-size:.78em;cursor:pointer;border:1px solid #3a3d5e;background:#252840;color:#888;transition:all .15s}
+.vs-radio label:first-child{border-radius:5px 0 0 5px}
+.vs-radio label:last-child{border-radius:0 5px 5px 0}
+.vs-radio input{display:none}
+.vs-radio input:checked+span{color:#fff}
+.vs-radio label:has(input:checked){background:#e94560;border-color:#e94560;color:#fff}
+.canvas-area{flex:1;display:flex;flex-direction:column;min-width:0}
+.canvas-row{flex:1;display:flex;min-height:0}
+.canvas-wrapper{flex:1;position:relative;min-width:0;overflow:hidden}
+.canvas-wrapper canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+.canvas-title{position:absolute;top:8px;left:12px;font-size:.78em;font-weight:600;color:#fff;background:rgba(15,17,23,.85);padding:2px 8px;border-radius:4px;z-index:1;pointer-events:none}
+#three-container{position:absolute;inset:0}
+.eq-bar{flex-shrink:0;background:#161822;border-top:1px solid #2a2d3e;padding:6px 14px;display:flex;align-items:center;gap:10px;overflow-x:auto}
+.eq-block{background:#1c1f2e;border-radius:5px;padding:5px 10px;border:1px solid #2a2d3e;flex-shrink:0}
+.eq-block-title{font-size:.6em;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:2px}
+.eq-block .katex{font-size:.88em}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>L2 Regularization &equiv; Virtual Samples with y = 0</h1>
+  <div class="subtitle">Interactive: Ridge regression as augmented OLS &mdash; Cerebellar regularization via sparse PF activity</div>
+</div>
+
+<div class="main-layout">
+  <div class="control-panel">
+    <div class="mode-tabs">
+      <div class="mode-tab active" onclick="setMode(1)">p = 1</div>
+      <div class="mode-tab" onclick="setMode(2)">p = 2 (3D)</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Regularization</div>
+      <div class="slider-group">
+        <div class="slider-label"><span>&lambda;</span><span class="slider-value" id="lambda-val">1.00</span></div>
+        <input type="range" id="lambda-slider" min="0" max="10" step="0.05" value="1.0">
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Virtual Samples</div>
+      <div id="vs-count-area">
+        <div class="vs-radio" id="vs-radio">
+          <label><input type="radio" name="vs-count" value="0"><span>0</span></label>
+          <label><input type="radio" name="vs-count" value="1"><span>1</span></label>
+          <label><input type="radio" name="vs-count" value="2" checked><span>2</span></label>
+        </div>
+        <div class="info-text" id="vs-desc">2 virtual samples: full L2 on both w₁, w₂</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Display</div>
+      <div class="toggle-group">
+        <span class="toggle-label"><span class="color-dot dot-ols"></span>OLS</span>
+        <label class="toggle"><input type="checkbox" id="show-ols" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-group">
+        <span class="toggle-label"><span class="color-dot dot-ridge"></span>Ridge</span>
+        <label class="toggle"><input type="checkbox" id="show-ridge" checked><span class="toggle-slider"></span></label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title" id="data-section-title">Data</div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="addRandomPoint()">+ Random</button>
+        <button class="btn btn-secondary" onclick="clearData()">Clear</button>
+      </div>
+      <div class="btn-group" id="preset-btns"></div>
+      <div class="preset-desc" id="preset-desc"></div>
+      <div class="data-list" id="data-list"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title" id="weight-title">Weights</div>
+      <div class="weight-display">
+        <div><span class="color-dot dot-ols"></span><span class="ols">OLS: </span><span id="w-ols">-</span></div>
+        <div><span class="color-dot dot-ridge"></span><span class="ridge">Ridge: </span><span id="w-ridge">-</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Augmented System</div>
+      <div class="matrix-display" id="matrix-display"></div>
+    </div>
+  </div>
+
+  <div class="canvas-area">
+    <div class="canvas-row">
+      <div class="canvas-wrapper" id="left-wrapper">
+        <div class="canvas-title" id="canvas-left-title">Data Space</div>
+        <canvas id="canvas-left"></canvas>
+        <div id="three-container" style="display:none"></div>
+      </div>
+      <div class="canvas-wrapper">
+        <div class="canvas-title" id="canvas-right-title">Cost Landscape</div>
+        <canvas id="canvas-right"></canvas>
+      </div>
+    </div>
+    <div class="eq-bar" id="eq-bar"></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ===== State =====
+let mode = 1;
+let data1D = [], data2D = [];
+let lambda = 1.0;
+let vsCount = 2; // 0, 1, or 2
+
+// Three.js state
+let threeScene, threeCamera, threeRenderer, threeControls;
+let threeInited = false;
+
+// Expose to global for onclick handlers
+window.setMode = setMode;
+window.addRandomPoint = addRandomPoint;
+window.removePoint = removePoint;
+window.clearData = clearData;
+window.loadPreset = loadPreset;
+
+// ===== Virtual sample count =====
+function getVsCount() {
+  const r = document.querySelector('input[name="vs-count"]:checked');
+  return r ? parseInt(r.value) : 2;
+}
+function updateVsDesc() {
+  const n = getVsCount();
+  const el = document.getElementById('vs-desc');
+  if (mode === 1) {
+    el.textContent = n === 0 ? 'No regularization' : `1 virtual sample: (√λ, 0) → full L2`;
+  } else {
+    if (n === 0) el.textContent = 'No regularization (Ridge = OLS)';
+    else if (n === 1) el.textContent = '1 virtual: (√λ,0)→0. Regularize w₁ only';
+    else el.textContent = '2 virtuals: full L2 on both w₁, w₂';
+  }
+}
+
+// ===== Mode =====
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-tab').forEach((t,i)=>t.classList.toggle('active',i===m-1));
+  // Adjust VS radio for p=1 (max 1) vs p=2 (max 2)
+  const radios = document.getElementById('vs-radio');
+  if (mode === 1) {
+    radios.innerHTML = `<label><input type="radio" name="vs-count" value="0"><span>0</span></label><label><input type="radio" name="vs-count" value="1" checked><span>1</span></label>`;
+  } else {
+    radios.innerHTML = `<label><input type="radio" name="vs-count" value="0"><span>0</span></label><label><input type="radio" name="vs-count" value="1"><span>1</span></label><label><input type="radio" name="vs-count" value="2" checked><span>2</span></label>`;
+  }
+  document.querySelectorAll('input[name="vs-count"]').forEach(r=>r.addEventListener('change',()=>{updateVsDesc();updateAll();}));
+
+  // Show/hide Three.js
+  document.getElementById('three-container').style.display = mode===2 ? 'block' : 'none';
+  document.getElementById('canvas-left').style.display = mode===1 ? 'block' : 'none';
+
+  renderPresetButtons();
+  renderEquations();
+  updateVsDesc();
+  if (mode===1 && !data1D.length) loadPreset('simple');
+  else if (mode===2 && !data2D.length) loadPreset('2d-simple');
+  else updateAll();
+}
+
+function renderPresetButtons() {
+  const c = document.getElementById('preset-btns');
+  if (mode===1) {
+    c.innerHTML=`<button class="btn btn-secondary" onclick="loadPreset('simple')">Simple</button><button class="btn btn-secondary" onclick="loadPreset('overfit')">Overfit</button><button class="btn btn-secondary" onclick="loadPreset('noisy')">Noisy</button>`;
+    document.getElementById('data-section-title').innerHTML='Data (x→y)';
+    document.getElementById('weight-title').textContent='Weights (y=wx)';
+    document.getElementById('canvas-left-title').textContent='Data Space: x → y';
+    document.getElementById('canvas-right-title').textContent='Cost Landscape J(w)';
+  } else {
+    c.innerHTML=`<button class="btn btn-secondary" onclick="loadPreset('2d-simple')">Simple</button><button class="btn btn-secondary" onclick="loadPreset('2d-collinear')">Collinear</button><button class="btn btn-secondary" onclick="loadPreset('2d-overfit')">Overfit</button>`;
+    document.getElementById('data-section-title').innerHTML='Data (x₁,x₂→y)';
+    document.getElementById('weight-title').textContent='Weights (y=w₁x₁+w₂x₂)';
+    document.getElementById('canvas-left-title').textContent='3D: x₁, x₂ → y (drag to rotate)';
+    document.getElementById('canvas-right-title').textContent='Weight Space: w₁ vs w₂';
+  }
+}
+
+// ===== Presets =====
+function loadPreset(name) {
+  document.getElementById('preset-desc').textContent='';
+  if(name==='simple'){data1D=[{x:1,y:2.2},{x:2,y:3.8},{x:3,y:6.5},{x:4,y:7.8},{x:5,y:10.1}];document.getElementById('preset-desc').textContent='5 pts, clear linear.';}
+  else if(name==='overfit'){data1D=[{x:4,y:12}];document.getElementById('preset-desc').textContent='1 sample → OLS exact. Ridge shrinks.';}
+  else if(name==='noisy'){data1D=[{x:1,y:5},{x:2,y:1},{x:3,y:8},{x:4,y:3},{x:5,y:9},{x:2.5,y:7}];document.getElementById('preset-desc').textContent='Noisy → Ridge stabilizes.';}
+  else if(name==='2d-simple'){data2D=[{x1:1,x2:.5,y:2.5},{x1:2,x2:1,y:4},{x1:3,x2:2,y:7},{x1:1.5,x2:3,y:5.5},{x1:4,x2:1.5,y:6}];document.getElementById('preset-desc').textContent='5 well-conditioned 2D.';}
+  else if(name==='2d-collinear'){data2D=[{x1:1,x2:1.02,y:3},{x1:2,x2:1.98,y:5.5},{x1:3,x2:3.01,y:8},{x1:4,x2:3.99,y:10.5},{x1:5,x2:5.01,y:13}];document.getElementById('preset-desc').textContent='x₁≈x₂ → ill-conditioned.';}
+  else if(name==='2d-overfit'){data2D=[{x1:2,x2:1,y:8}];document.getElementById('preset-desc').textContent='1 sample, 2 weights → underdetermined.';}
+  updateAll();
+}
+function addRandomPoint(){
+  if(mode===1){const x=+(Math.random()*5+.5).toFixed(2);data1D.push({x,y:+(2*x+(Math.random()-.5)*4).toFixed(2)});}
+  else{const x1=+(Math.random()*4+.5).toFixed(2),x2=+(Math.random()*4+.5).toFixed(2);data2D.push({x1,x2,y:+(1.5*x1+.8*x2+(Math.random()-.5)*2).toFixed(2)});}
+  updateAll();
+}
+function removePoint(i){if(mode===1)data1D.splice(i,1);else data2D.splice(i,1);updateAll();}
+function clearData(){if(mode===1)data1D=[];else data2D=[];document.getElementById('preset-desc').textContent='';updateAll();}
+
+// ===== Solvers =====
+function ols1D(d){if(!d.length)return null;let xx=0,xy=0;d.forEach(p=>{xx+=p.x*p.x;xy+=p.x*p.y});return Math.abs(xx)<1e-12?null:xy/xx;}
+function ridge1D(d,l,n){if(!d.length)return null;let xx=0,xy=0;d.forEach(p=>{xx+=p.x*p.x;xy+=p.x*p.y});return xy/(xx+(n>0?l:0));}
+
+function matMul(A,B){const m=A.length,n=B[0].length,k=B.length;const C=Array.from({length:m},()=>Array(n).fill(0));for(let i=0;i<m;i++)for(let j=0;j<n;j++)for(let l=0;l<k;l++)C[i][j]+=A[i][l]*B[l][j];return C;}
+function transpose(A){return A[0].map((_,j)=>A.map(r=>r[j]));}
+function inv2(M){const[[a,b],[c,d]]=M;const det=a*d-b*c;if(Math.abs(det)<1e-12)return null;return[[d/det,-b/det],[-c/det,a/det]];}
+
+function ols2D(d){
+  if(!d.length)return null;
+  const X=d.map(p=>[p.x1,p.x2]),y=d.map(p=>[p.y]);
+  const Xt=transpose(X),XtX=matMul(Xt,X),Xty=matMul(Xt,y);
+  const inv=inv2(XtX);if(!inv)return null;
+  const w=matMul(inv,Xty);return[w[0][0],w[1][0]];
+}
+// Partial ridge: nVs=0→OLS, 1→regularize w1 only, 2→full L2
+function ridge2D(d,l,nVs){
+  if(!d.length)return null;
+  const X=d.map(p=>[p.x1,p.x2]),y=d.map(p=>[p.y]);
+  const Xt=transpose(X),XtX=matMul(Xt,X),Xty=matMul(Xt,y);
+  if(nVs>=1) XtX[0][0]+=l;
+  if(nVs>=2) XtX[1][1]+=l;
+  const inv=inv2(XtX);if(!inv)return null;
+  const w=matMul(inv,Xty);return[w[0][0],w[1][0]];
+}
+function cost2D(d,w1,w2){return d.reduce((s,p)=>s+(p.y-w1*p.x1-w2*p.x2)**2,0);}
+
+// ===== Canvas helpers =====
+function setup(id){
+  const c=document.getElementById(id);
+  const r=c.parentElement.getBoundingClientRect();
+  const dpr=window.devicePixelRatio||1;
+  c.width=r.width*dpr;c.height=r.height*dpr;
+  const ctx=c.getContext('2d');ctx.scale(dpr,dpr);
+  return{ctx,W:r.width,H:r.height};
+}
+
+// ===== 1D Drawing =====
+function draw1DData(){
+  const{ctx,W,H}=setup('canvas-left');
+  const so=document.getElementById('show-ols').checked,sr=document.getElementById('show-ridge').checked;
+  const nVs=getVsCount();
+  const wO=ols1D(data1D),wR=ridge1D(data1D,lambda,nVs);
+  const pad={l:48,r:16,t:32,b:36};const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
+  let ax=[0,6],ay=[-2,14];data1D.forEach(d=>{ax.push(d.x);ay.push(d.y);});
+  if(nVs>0&&lambda>0)ax.push(Math.sqrt(lambda));
+  const xmin=Math.min(...ax)-.5,xmax=Math.max(...ax)+.5,ymin=Math.min(...ay)-1,ymax=Math.max(...ay)+1;
+  const tx=v=>pad.l+(v-xmin)/(xmax-xmin)*pw,ty=v=>pad.t+ph-(v-ymin)/(ymax-ymin)*ph;
+  ctx.fillStyle='#0f1117';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#1c1f2e';ctx.lineWidth=1;
+  for(let g=Math.ceil(xmin);g<=xmax;g++){ctx.beginPath();ctx.moveTo(tx(g),pad.t);ctx.lineTo(tx(g),pad.t+ph);ctx.stroke();}
+  for(let g=Math.ceil(ymin);g<=ymax;g++){ctx.beginPath();ctx.moveTo(pad.l,ty(g));ctx.lineTo(pad.l+pw,ty(g));ctx.stroke();}
+  ctx.strokeStyle='#3a3d5e';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t+ph);ctx.lineTo(pad.l+pw,pad.t+ph);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+ph);ctx.stroke();
+  ctx.fillStyle='#888';ctx.font='10px system-ui';ctx.textAlign='center';
+  for(let g=Math.ceil(xmin);g<=Math.floor(xmax);g++)ctx.fillText(g,tx(g),pad.t+ph+14);
+  ctx.textAlign='right';for(let g=Math.ceil(ymin);g<=Math.floor(ymax);g+=Math.max(1,Math.ceil((ymax-ymin)/8)))ctx.fillText(g,pad.l-5,ty(g)+4);
+  ctx.fillStyle='#aaa';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText('x',pad.l+pw/2,H-4);
+  ctx.save();ctx.translate(12,pad.t+ph/2);ctx.rotate(-Math.PI/2);ctx.fillText('y',0,0);ctx.restore();
+  if(so&&wO!==null){ctx.strokeStyle='rgba(255,217,61,.7)';ctx.lineWidth=2.5;ctx.setLineDash([8,4]);ctx.beginPath();ctx.moveTo(tx(xmin),ty(wO*xmin));ctx.lineTo(tx(xmax),ty(wO*xmax));ctx.stroke();ctx.setLineDash([]);}
+  if(sr&&wR!==null){ctx.strokeStyle='#64ffda';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(tx(xmin),ty(wR*xmin));ctx.lineTo(tx(xmax),ty(wR*xmax));ctx.stroke();}
+  if(nVs>0&&lambda>0){
+    const sq=Math.sqrt(lambda),vx=tx(sq),vy=ty(0);
+    ctx.strokeStyle='rgba(79,195,247,.4)';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(tx(0),ty(0));ctx.lineTo(vx,vy);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#4fc3f7';ctx.beginPath();ctx.moveTo(vx,vy-7);ctx.lineTo(vx+6,vy);ctx.lineTo(vx,vy+7);ctx.lineTo(vx-6,vy);ctx.closePath();ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
+    ctx.fillStyle='#4fc3f7';ctx.font='9px monospace';ctx.textAlign='center';ctx.fillText(`(√λ=${sq.toFixed(2)}, 0)`,vx,vy-10);
+  }
+  data1D.forEach(d=>{const px=tx(d.x),py=ty(d.y);
+    if(sr&&wR!==null){ctx.strokeStyle='rgba(100,255,218,.2)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px,ty(wR*d.x));ctx.stroke();}
+    ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fillStyle='#ffd93d';ctx.fill();ctx.strokeStyle='#000';ctx.lineWidth=1.5;ctx.stroke();});
+}
+
+function draw1DCost(){
+  const{ctx,W,H}=setup('canvas-right');
+  const so=document.getElementById('show-ols').checked,sr=document.getElementById('show-ridge').checked;
+  const nVs=getVsCount();
+  const wO=ols1D(data1D),wR=ridge1D(data1D,lambda,nVs);
+  const pad={l:48,r:16,t:32,b:36};const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
+  const wC=wO!==null?wO:2,wRange=Math.max(4,Math.abs(wC)*1.5+2);
+  const wmin=wC-wRange,wmax=wC+wRange,toX=v=>pad.l+(v-wmin)/(wmax-wmin)*pw;
+  const nP=200;const wV=Array.from({length:nP},(_,i)=>wmin+(wmax-wmin)*i/(nP-1));
+  const cost1D=(d,w)=>d.reduce((s,p)=>s+(p.y-w*p.x)**2,0);
+  const jD=wV.map(w=>cost1D(data1D,w)),jR=wV.map(w=>(nVs>0?lambda:0)*w*w),jT=wV.map((_,i)=>jD[i]+jR[i]);
+  const maxJ=Math.max(...jT)*1.1||10;const toY=v=>pad.t+ph-(v/maxJ)*ph;
+  ctx.fillStyle='#0f1117';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#1c1f2e';ctx.lineWidth=1;for(let g=Math.ceil(wmin);g<=Math.floor(wmax);g++){ctx.beginPath();ctx.moveTo(toX(g),pad.t);ctx.lineTo(toX(g),pad.t+ph);ctx.stroke();}
+  ctx.strokeStyle='#3a3d5e';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(pad.l,pad.t+ph);ctx.lineTo(pad.l+pw,pad.t+ph);ctx.stroke();ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+ph);ctx.stroke();
+  ctx.fillStyle='#888';ctx.font='10px system-ui';ctx.textAlign='center';for(let g=Math.ceil(wmin);g<=Math.floor(wmax);g++)ctx.fillText(g,toX(g),pad.t+ph+14);
+  ctx.fillStyle='#aaa';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText('w',pad.l+pw/2,H-4);ctx.save();ctx.translate(12,pad.t+ph/2);ctx.rotate(-Math.PI/2);ctx.fillText('J(w)',0,0);ctx.restore();
+  if(!data1D.length){ctx.fillStyle='#555';ctx.font='13px system-ui';ctx.textAlign='center';ctx.fillText('Add data',pad.l+pw/2,pad.t+ph/2);return;}
+  ctx.strokeStyle='rgba(255,217,61,.5)';ctx.lineWidth=2;ctx.setLineDash([6,3]);ctx.beginPath();wV.forEach((w,i)=>{const px=toX(w),py=toY(Math.min(jD[i],maxJ));i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);});ctx.stroke();ctx.setLineDash([]);
+  if(nVs>0&&lambda>0){ctx.strokeStyle='rgba(79,195,247,.5)';ctx.lineWidth=2;ctx.setLineDash([4,4]);ctx.beginPath();wV.forEach((w,i)=>{const px=toX(w),py=toY(Math.min(jR[i],maxJ));i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);});ctx.stroke();ctx.setLineDash([]);}
+  ctx.strokeStyle='#64ffda';ctx.lineWidth=2.5;ctx.beginPath();wV.forEach((w,i)=>{const px=toX(w),py=toY(Math.min(jT[i],maxJ));i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);});ctx.stroke();
+  if(so&&wO!==null){const px=toX(wO),py=toY(Math.min(cost1D(data1D,wO),maxJ));ctx.strokeStyle='rgba(255,217,61,.3)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(px,pad.t);ctx.lineTo(px,pad.t+ph);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(px,py,6,0,Math.PI*2);ctx.fillStyle='#ffd93d';ctx.fill();ctx.strokeStyle='#000';ctx.lineWidth=1.5;ctx.stroke();}
+  if(sr&&wR!==null){const c=cost1D(data1D,wR)+(nVs>0?lambda:0)*wR*wR;const px=toX(wR),py=toY(Math.min(c,maxJ));ctx.strokeStyle='rgba(100,255,218,.3)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(px,pad.t);ctx.lineTo(px,pad.t+ph);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(px,py,6,0,Math.PI*2);ctx.fillStyle='#64ffda';ctx.fill();ctx.strokeStyle='#000';ctx.lineWidth=1.5;ctx.stroke();}
+}
+
+// ===== Three.js 3D Scene =====
+function initThree() {
+  if(threeInited) return;
+  const container = document.getElementById('three-container');
+  const rect = container.getBoundingClientRect();
+  threeScene = new THREE.Scene();
+  threeScene.background = new THREE.Color(0x0f1117);
+  threeCamera = new THREE.PerspectiveCamera(50, rect.width/rect.height, 0.1, 200);
+  threeCamera.position.set(8, 6, 10);
+  threeRenderer = new THREE.WebGLRenderer({antialias:true});
+  threeRenderer.setSize(rect.width, rect.height);
+  threeRenderer.setPixelRatio(window.devicePixelRatio);
+  container.appendChild(threeRenderer.domElement);
+  threeControls = new OrbitControls(threeCamera, threeRenderer.domElement);
+  threeControls.target.set(2.5, 3, 2.5);
+  threeControls.enableDamping = true;
+  threeControls.dampingFactor = 0.1;
+  threeControls.update();
+  threeControls.addEventListener('change', ()=>threeRenderer.render(threeScene, threeCamera));
+  // Ambient + directional light
+  threeScene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.8);
+  dl.position.set(5,10,7);
+  threeScene.add(dl);
+  threeInited = true;
+}
+
+function resizeThree(){
+  if(!threeInited) return;
+  const container = document.getElementById('three-container');
+  const rect = container.getBoundingClientRect();
+  threeCamera.aspect = rect.width/rect.height;
+  threeCamera.updateProjectionMatrix();
+  threeRenderer.setSize(rect.width, rect.height);
+  threeRenderer.render(threeScene, threeCamera);
+}
+
+function draw3DScene(){
+  initThree();
+  const so=document.getElementById('show-ols').checked,sr=document.getElementById('show-ridge').checked;
+  const nVs=getVsCount();
+  const wO=ols2D(data2D),wR=ridge2D(data2D,lambda,nVs);
+
+  // Clear scene (keep lights & camera)
+  const toRemove=[];
+  threeScene.traverse(c=>{if(c.isMesh||c.isLine||c.isLineSegments||c.isSprite)toRemove.push(c);});
+  toRemove.forEach(c=>{c.geometry?.dispose();c.material?.dispose();threeScene.remove(c);});
+
+  // Data range
+  const range = 6;
+
+  // Grid on y=0 plane (xz plane in Three.js where we map: Three x=x₁, Three y=y, Three z=x₂)
+  const gridHelper = new THREE.GridHelper(range, 6, 0x2a2d3e, 0x1c1f2e);
+  gridHelper.position.set(range/2, 0, range/2);
+  threeScene.add(gridHelper);
+
+  // Axes
+  const axMat = new THREE.LineBasicMaterial({color:0x5a5d7e});
+  // x1 axis
+  const ax1 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(range,0,0)]);
+  threeScene.add(new THREE.Line(ax1,axMat));
+  // x2 axis
+  const ax2 = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,range)]);
+  threeScene.add(new THREE.Line(ax2,axMat));
+  // y axis
+  const axy = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,15,0)]);
+  threeScene.add(new THREE.Line(axy,axMat));
+
+  // Axis labels using sprites
+  function makeLabel(text, pos, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width=128;canvas.height=64;
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle=color||'#aaa';ctx.font='bold 36px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(text,64,32);
+    const tex=new THREE.CanvasTexture(canvas);
+    const mat=new THREE.SpriteMaterial({map:tex,transparent:true});
+    const sprite=new THREE.Sprite(mat);
+    sprite.position.copy(pos);sprite.scale.set(1.2,.6,1);
+    threeScene.add(sprite);
+  }
+  makeLabel('x₁',new THREE.Vector3(range+.5,0,0));
+  makeLabel('x₂',new THREE.Vector3(0,0,range+.5));
+  makeLabel('y',new THREE.Vector3(0,15.5,0));
+  // Number labels
+  for(let i=1;i<=5;i++){
+    makeLabel(String(i),new THREE.Vector3(i,-.4,0),'#666');
+    makeLabel(String(i),new THREE.Vector3(0,-.4,i),'#666');
+  }
+  for(let i=2;i<=14;i+=2) makeLabel(String(i),new THREE.Vector3(-.4,i,0),'#666');
+
+  // Real data points
+  const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16);
+  const realMat = new THREE.MeshPhongMaterial({color:0xffd93d, emissive:0x332800});
+  data2D.forEach(d=>{
+    const mesh = new THREE.Mesh(sphereGeo, realMat);
+    mesh.position.set(d.x1, d.y, d.x2);
+    threeScene.add(mesh);
+    // Drop line
+    const lg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(d.x1,0,d.x2),new THREE.Vector3(d.x1,d.y,d.x2)]);
+    threeScene.add(new THREE.Line(lg, new THREE.LineBasicMaterial({color:0xffd93d,transparent:true,opacity:0.3})));
+  });
+
+  // Virtual samples
+  const sqrtL = Math.sqrt(lambda);
+  const vsList = [];
+  if(nVs>=1 && lambda>0) vsList.push({x1:sqrtL,x2:0,y:0});
+  if(nVs>=2 && lambda>0) vsList.push({x1:0,x2:sqrtL,y:0});
+
+  const diamondGeo = new THREE.OctahedronGeometry(0.18);
+  const vsMat = new THREE.MeshPhongMaterial({color:0x4fc3f7, emissive:0x0a2030});
+  vsList.forEach(v=>{
+    const mesh = new THREE.Mesh(diamondGeo, vsMat);
+    mesh.position.set(v.x1, v.y, v.x2);
+    threeScene.add(mesh);
+    // Dashed line from origin
+    const lg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(v.x1,0,v.x2)]);
+    const lm = new THREE.LineDashedMaterial({color:0x4fc3f7,dashSize:.2,gapSize:.15,transparent:true,opacity:.5});
+    const ln = new THREE.Line(lg, lm);
+    ln.computeLineDistances();
+    threeScene.add(ln);
+  });
+
+  // Regression planes
+  function makePlane(w, color, opacity) {
+    if(!w) return;
+    const geo = new THREE.BufferGeometry();
+    // Plane: y = w[0]*x1 + w[1]*x2 over [0,range] x [0,range]
+    const res=20;
+    const vertices=[],indices=[];
+    for(let j=0;j<=res;j++){
+      for(let i=0;i<=res;i++){
+        const x1=range*i/res, x2=range*j/res;
+        const y=w[0]*x1+w[1]*x2;
+        vertices.push(x1,Math.max(0,Math.min(15,y)),x2);
+      }
+    }
+    for(let j=0;j<res;j++){
+      for(let i=0;i<res;i++){
+        const a=j*(res+1)+i, b=a+1, c=a+(res+1), d=c+1;
+        indices.push(a,b,c, b,d,c);
+      }
+    }
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const mat=new THREE.MeshPhongMaterial({color,transparent:true,opacity,side:THREE.DoubleSide,depthWrite:false});
+    threeScene.add(new THREE.Mesh(geo,mat));
+    // Wireframe
+    const wire=new THREE.LineSegments(new THREE.WireframeGeometry(geo),new THREE.LineBasicMaterial({color,transparent:true,opacity:opacity*.5}));
+    threeScene.add(wire);
+  }
+
+  if(so) makePlane(wO, 0xffd93d, 0.25);
+  if(sr) makePlane(wR, 0x64ffda, 0.35);
+
+  threeRenderer.render(threeScene, threeCamera);
+}
+
+// ===== 2D Weight Space (right canvas, same as before) =====
+function draw2DWeightSpace(){
+  const{ctx,W,H}=setup('canvas-right');
+  const so=document.getElementById('show-ols').checked,sr=document.getElementById('show-ridge').checked;
+  const nVs=getVsCount();
+  const wO=ols2D(data2D),wR=ridge2D(data2D,lambda,nVs);
+  const pad={l:48,r:20,t:32,b:36};const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
+  const wC1=wO?wO[0]:2,wC2=wO?wO[1]:1;
+  const span=Math.max(3,Math.max(Math.abs(wC1),Math.abs(wC2))*1.8+1);
+  const w1min=wC1-span,w1max=wC1+span,w2min=wC2-span,w2max=wC2+span;
+  const toX=v=>pad.l+(v-w1min)/(w1max-w1min)*pw;
+  const toY=v=>pad.t+ph-(v-w2min)/(w2max-w2min)*ph;
+  ctx.fillStyle='#0f1117';ctx.fillRect(0,0,W,H);
+  if(!data2D.length){ctx.fillStyle='#555';ctx.font='13px system-ui';ctx.textAlign='center';ctx.fillText('Add data',pad.l+pw/2,pad.t+ph/2);return;}
+  // Heatmap
+  const gN=80,cellW=pw/gN,cellH=ph/gN;
+  const grid=[];let minC=Infinity,maxC=0;
+  for(let j=0;j<gN;j++){grid[j]=[];for(let i=0;i<gN;i++){const w1=w1min+(w1max-w1min)*i/(gN-1),w2=w2min+(w2max-w2min)*j/(gN-1);const c=cost2D(data2D,w1,w2);grid[j][i]=c;if(c<minC)minC=c;if(c>maxC)maxC=c;}}
+  for(let j=0;j<gN;j++)for(let i=0;i<gN;i++){const t=Math.min(1,(grid[j][i]-minC)/(maxC-minC+1e-6)),v=Math.max(0,1-t);ctx.fillStyle=`rgb(${15+v*30|0},${17+v*40|0},${23+v*60|0})`;ctx.fillRect(pad.l+i*cellW,pad.t+j*cellH,cellW+1,cellH+1);}
+  // Contour lines
+  const levels=[.5,1,2,4,8,16,32,64,128,256,512];
+  function drawContours(gridData,mn,style){
+    ctx.strokeStyle=style;ctx.lineWidth=1;
+    levels.forEach(lev=>{const val=mn+lev;
+      for(let j=0;j<gN-1;j++)for(let i=0;i<gN-1;i++){const v00=gridData[j][i],v10=gridData[j][i+1],v01=gridData[j+1][i],v11=gridData[j+1][i+1];const pts=[];
+        if((v00<val)!==(v10<val)){const t=(val-v00)/(v10-v00);pts.push([pad.l+(i+t)*cellW,pad.t+j*cellH]);}
+        if((v10<val)!==(v11<val)){const t=(val-v10)/(v11-v10);pts.push([pad.l+(i+1)*cellW,pad.t+(j+t)*cellH]);}
+        if((v01<val)!==(v11<val)){const t=(val-v01)/(v11-v01);pts.push([pad.l+(i+t)*cellW,pad.t+(j+1)*cellH]);}
+        if((v00<val)!==(v01<val)){const t=(val-v00)/(v01-v00);pts.push([pad.l+i*cellW,pad.t+(j+t)*cellH]);}
+        if(pts.length>=2){ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);ctx.lineTo(pts[1][0],pts[1][1]);ctx.stroke();}
+      }});
+  }
+  drawContours(grid,minC,'rgba(255,217,61,.25)');
+  // Total cost contours
+  if(nVs>0&&lambda>0){
+    const gridT=[];let minT=Infinity;
+    for(let j=0;j<gN;j++){gridT[j]=[];for(let i=0;i<gN;i++){const w1=w1min+(w1max-w1min)*i/(gN-1),w2=w2min+(w2max-w2min)*j/(gN-1);const c=grid[j][i]+lambda*((nVs>=1?w1*w1:0)+(nVs>=2?w2*w2:0));gridT[j][i]=c;if(c<minT)minT=c;}}
+    drawContours(gridT,minT,'rgba(100,255,218,.3)');
+  }
+  // L2 penalty circle/ellipse
+  if(nVs>0&&lambda>0){
+    const nC=100;const sq=Math.sqrt(lambda);
+    [1,2].forEach(mult=>{
+      ctx.strokeStyle=mult===1?'rgba(233,69,96,.6)':'rgba(233,69,96,.2)';ctx.lineWidth=mult===1?2:1;ctx.setLineDash(mult===1?[]:[4,4]);
+      ctx.beginPath();
+      for(let i=0;i<=nC;i++){const a=2*Math.PI*i/nC;
+        const rx=nVs>=1?sq*mult:100, ry=nVs>=2?sq*mult:100; // if only 1 VS, only w1 constrained
+        const px=toX(rx*Math.cos(a)),py=toY(ry*Math.sin(a));
+        i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);}
+      ctx.stroke();ctx.setLineDash([]);
+    });
+    ctx.fillStyle='rgba(233,69,96,.8)';ctx.font='9px system-ui';ctx.textAlign='left';
+    if(nVs===1) ctx.fillText('Reg. on w₁ only',toX(sq)+5,toY(0)-5);
+    else ctx.fillText('‖w‖²=λ',toX(sq*.7)+3,toY(sq*.7)-3);
+  }
+  // Axes
+  ctx.strokeStyle='#3a3d5e';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t+ph);ctx.lineTo(pad.l+pw,pad.t+ph);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+ph);ctx.stroke();
+  ctx.fillStyle='#888';ctx.font='10px system-ui';ctx.textAlign='center';
+  for(let g=Math.ceil(w1min);g<=Math.floor(w1max);g++)ctx.fillText(g,toX(g),pad.t+ph+14);
+  ctx.textAlign='right';for(let g=Math.ceil(w2min);g<=Math.floor(w2max);g++)ctx.fillText(g,pad.l-5,toY(g)+4);
+  ctx.fillStyle='#aaa';ctx.font='11px system-ui';ctx.textAlign='center';ctx.fillText('w₁',pad.l+pw/2,H-4);
+  ctx.save();ctx.translate(12,pad.t+ph/2);ctx.rotate(-Math.PI/2);ctx.fillText('w₂',0,0);ctx.restore();
+  // Origin
+  if(w1min<0&&w1max>0&&w2min<0&&w2max>0){ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(toX(0),pad.t);ctx.lineTo(toX(0),pad.t+ph);ctx.stroke();ctx.beginPath();ctx.moveTo(pad.l,toY(0));ctx.lineTo(pad.l+pw,toY(0));ctx.stroke();}
+  // Points
+  if(so&&wO){const px=toX(wO[0]),py=toY(wO[1]);ctx.beginPath();ctx.arc(px,py,7,0,Math.PI*2);ctx.fillStyle='#ffd93d';ctx.fill();ctx.strokeStyle='#000';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#ffd93d';ctx.font='bold 10px system-ui';ctx.textAlign='left';ctx.fillText('OLS',px+10,py-4);}
+  if(sr&&wR){const px=toX(wR[0]),py=toY(wR[1]);ctx.beginPath();ctx.arc(px,py,7,0,Math.PI*2);ctx.fillStyle='#64ffda';ctx.fill();ctx.strokeStyle='#000';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#64ffda';ctx.font='bold 10px system-ui';ctx.textAlign='left';ctx.fillText('Ridge',px+10,py-4);}
+  if(so&&sr&&wO&&wR){const x1=toX(wO[0]),y1=toY(wO[1]),x2=toX(wR[0]),y2=toY(wR[1]),dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy);
+    if(len>5){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();const angle=Math.atan2(dy,dx);ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-10*Math.cos(angle-.3),y2-10*Math.sin(angle-.3));ctx.lineTo(x2-10*Math.cos(angle+.3),y2-10*Math.sin(angle+.3));ctx.closePath();ctx.fill();}}
+}
+
+// ===== Update =====
+function updateDataList(){
+  const c=document.getElementById('data-list');let html='';const nVs=getVsCount();const sq=Math.sqrt(lambda).toFixed(2);
+  if(mode===1){
+    data1D.forEach((d,i)=>{html+=`<div class="data-item"><span>(${d.x},${d.y})</span><button class="remove-btn" onclick="removePoint(${i})">×</button></div>`;});
+    if(nVs>0&&lambda>0) html+=`<div class="data-item virtual-item"><span>(${sq}, 0)</span><span style="color:#4fc3f7;font-size:.65em">virtual</span></div>`;
+  } else {
+    data2D.forEach((d,i)=>{html+=`<div class="data-item"><span>(${d.x1},${d.x2})→${d.y}</span><button class="remove-btn" onclick="removePoint(${i})">×</button></div>`;});
+    if(nVs>=1&&lambda>0) html+=`<div class="data-item virtual-item"><span>(${sq},0)→0</span><span style="color:#4fc3f7;font-size:.65em">v₁</span></div>`;
+    if(nVs>=2&&lambda>0) html+=`<div class="data-item virtual-item"><span>(0,${sq})→0</span><span style="color:#4fc3f7;font-size:.65em">v₂</span></div>`;
+  }
+  c.innerHTML=html;
+}
+
+function updateWeights(){
+  const nVs=getVsCount();
+  if(mode===1){const wO=ols1D(data1D),wR=ridge1D(data1D,lambda,nVs);
+    document.getElementById('w-ols').textContent=wO!==null?wO.toFixed(4):'—';
+    document.getElementById('w-ridge').textContent=wR!==null?wR.toFixed(4):'—';
+  } else {const wO=ols2D(data2D),wR=ridge2D(data2D,lambda,nVs);
+    document.getElementById('w-ols').textContent=wO?`(${wO[0].toFixed(3)}, ${wO[1].toFixed(3)})`:'—';
+    document.getElementById('w-ridge').textContent=wR?`(${wR[0].toFixed(3)}, ${wR[1].toFixed(3)})`:'—';
+  }
+}
+
+function updateMatrix(){
+  const c=document.getElementById('matrix-display');const sq=Math.sqrt(lambda).toFixed(2);const nVs=getVsCount();
+  if(mode===1){
+    if(!data1D.length){c.innerHTML='<span style="color:#555;font-size:.75em">Add data</span>';return;}
+    const rows=data1D.slice(0,4).map(d=>d.x).join(' \\\\ '),yr=data1D.slice(0,4).map(d=>d.y).join(' \\\\ ');
+    const dots=data1D.length>4?' \\\\ \\vdots':'';
+    const vRow=nVs>0?` \\\\ \\hline \\color{#4fc3f7}{${sq}}`:'';
+    const vY=nVs>0?` \\\\ \\hline \\color{#4fc3f7}{0}`:'';
+    katex.render(`\\begin{pmatrix} ${rows}${dots}${vRow} \\end{pmatrix} w = \\begin{pmatrix} ${yr}${dots}${vY} \\end{pmatrix}`,c,{displayMode:true,throwOnError:false});
+  } else {
+    if(!data2D.length){c.innerHTML='<span style="color:#555;font-size:.75em">Add data</span>';return;}
+    const rows=data2D.slice(0,3).map(d=>`${d.x1} & ${d.x2}`).join(' \\\\ '),yr=data2D.slice(0,3).map(d=>d.y).join(' \\\\ ');
+    const dots=data2D.length>3?' \\\\ \\vdots & \\vdots':'',yd=data2D.length>3?' \\\\ \\vdots':'';
+    let vRows='',vY='';
+    if(nVs>=1){vRows+=` \\\\ \\color{#4fc3f7}{${sq}} & \\color{#4fc3f7}{0}`;vY+=` \\\\ \\color{#4fc3f7}{0}`;}
+    if(nVs>=2){vRows+=` \\\\ \\color{#4fc3f7}{0} & \\color{#4fc3f7}{${sq}}`;vY+=` \\\\ \\color{#4fc3f7}{0}`;}
+    const sep=nVs>0?' \\\\ \\hline':'';
+    // Build without \hline (simpler, avoids KaTeX issues)
+    katex.render(`\\begin{pmatrix} ${rows}${dots}${vRows} \\end{pmatrix}\\!\\mathbf{w} = \\begin{pmatrix} ${yr}${yd}${vY} \\end{pmatrix}`,c,{displayMode:true,throwOnError:false});
+  }
+}
+
+function updateAll(){
+  lambda=parseFloat(document.getElementById('lambda-slider').value);
+  document.getElementById('lambda-val').textContent=lambda.toFixed(2);
+  updateVsDesc();updateDataList();updateWeights();updateMatrix();
+  if(mode===1){draw1DData();draw1DCost();}
+  else{draw3DScene();draw2DWeightSpace();}
+}
+
+// Events
+document.getElementById('lambda-slider').addEventListener('input',updateAll);
+['show-ols','show-ridge'].forEach(id=>document.getElementById(id).addEventListener('change',updateAll));
+document.querySelectorAll('input[name="vs-count"]').forEach(r=>r.addEventListener('change',()=>{updateVsDesc();updateAll();}));
+window.addEventListener('resize',()=>{updateAll();if(mode===2)resizeThree();});
+
+// Equations
+function renderEquations(){
+  const bar=document.getElementById('eq-bar');
+  if(mode===1){
+    bar.innerHTML=`<div class="eq-block"><div class="eq-block-title">Ridge</div><div id="eq1"></div></div><div class="eq-block"><div class="eq-block-title">≡ Aug. OLS</div><div id="eq2"></div></div><div class="eq-block"><div class="eq-block-title">Virtual Sample</div><div id="eq3"></div></div><div class="eq-block"><div class="eq-block-title">Solution</div><div id="eq4"></div></div>`;
+    katex.render(String.raw`J = \textstyle\sum(y_i-wx_i)^2+\lambda w^2`,document.getElementById('eq1'),{throwOnError:false});
+    katex.render(String.raw`=\textstyle\sum(y_i-x_iw)^2+(0-\!\sqrt\lambda\,w)^2`,document.getElementById('eq2'),{throwOnError:false});
+    katex.render(String.raw`x_v\!=\!\sqrt\lambda,\;y_v\!=\!0`,document.getElementById('eq3'),{throwOnError:false});
+    katex.render(String.raw`\hat w=\frac{\sum x_iy_i}{\sum x_i^2+\lambda}`,document.getElementById('eq4'),{throwOnError:false});
+  } else {
+    bar.innerHTML=`<div class="eq-block"><div class="eq-block-title">Ridge</div><div id="eq1"></div></div><div class="eq-block"><div class="eq-block-title">≡ Aug. OLS</div><div id="eq2"></div></div><div class="eq-block"><div class="eq-block-title">Virtual Samples</div><div id="eq3"></div></div><div class="eq-block"><div class="eq-block-title">Solution</div><div id="eq4"></div></div>`;
+    katex.render(String.raw`J(\mathbf w)=\|\mathbf y-\mathbf X\mathbf w\|^2+\lambda\|\mathbf w\|^2`,document.getElementById('eq1'),{throwOnError:false});
+    katex.render(String.raw`=\|\mathbf y-\mathbf X\mathbf w\|^2+\|\mathbf 0-\sqrt\lambda\mathbf I\,\mathbf w\|^2`,document.getElementById('eq2'),{throwOnError:false});
+    katex.render(String.raw`\mathbf x_v^{(j)}\!=\!\sqrt\lambda\,\mathbf e_j,\;y_v\!=\!0`,document.getElementById('eq3'),{throwOnError:false});
+    katex.render(String.raw`\hat{\mathbf w}=(\mathbf X^\top\!\mathbf X+\lambda\mathbf I)^{-1}\mathbf X^\top\!\mathbf y`,document.getElementById('eq4'),{throwOnError:false});
+  }
+}
+
+// Init
+renderPresetButtons();
+renderEquations();
+loadPreset('simple');
+</script>
+</body>
+</html>
