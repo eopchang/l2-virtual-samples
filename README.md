@@ -43,15 +43,6 @@ The second term is the cost from **p virtual samples**: each sample $\mathbf{x}_
 | **Presets** | Simple, Overfit, Noisy (p=1) · Simple, Collinear, Overfit (p=2) |
 | **+ Random** | Add a random data point |
 
-## Why This Matters: Cerebellar Learning
-
-This visualization is motivated by computational neuroscience research on how the **cerebellum** might implement regularization:
-
-- Cerebellar **parallel fibers (PFs)** are extremely numerous (~10⁸) but sparsely active
-- Each PF can be viewed as a high-dimensional basis function with sparse activation → resembling a virtual sample anchored near zero
-- The sparse PF activity pattern effectively implements **L2-like regularization** on Purkinje cell synaptic weights
-- This may explain the cerebellum's remarkable ability to generalize motor control from limited training
-
 ## Tech Stack
 
 - **Three.js** — 3D regression plane rendering with orbit controls
@@ -70,11 +61,6 @@ python3 -m http.server 3456
 Then open `http://localhost:3456`.
 
 > **Note:** Opening `index.html` directly via `file://` will fail due to ES module CORS restrictions. A local HTTP server is required.
-
-## References
-
-- Kim CE. *The Geometry of Generalization: Cerebellar Regularization via Sparse Virtual Samples* (2025)
-- Theoretical Neuroscience & Computational Medicine Lab, Gachon University
 
 ## License
 
